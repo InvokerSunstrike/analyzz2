@@ -1,147 +1,98 @@
 import { useEffect, useState } from 'react'
 
 const Logo = () => (
-  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-    <rect width="32" height="32" rx="9" fill="var(--olive-700)" />
-    <path d="M8 22 L13 10 L16 18 L19 10 L24 22" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-    <circle cx="24" cy="10" r="2" fill="var(--olive-300)" />
+  <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+    <rect width="30" height="30" rx="8" fill="var(--olive)" />
+    <path d="M7 20L11.5 10L15 17L18.5 10L23 20" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="22.5" cy="10" r="1.8" fill="var(--olive-light)" />
   </svg>
 )
 
-const IconHome = ({ active }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--olive-700)' : 'var(--text-3)'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 12L12 3l9 9" /><path d="M9 21V12h6v9" /><path d="M3 12v9h6M15 21v-9h6v9" />
-    <path d="M5 21h14" />
-  </svg>
-)
-
-const IconChart = ({ active }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={active ? 'var(--olive-700)' : 'var(--text-3)'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M7 16l3-4 3 3 3-6" />
-    <circle cx="16" cy="9" r="1.2" fill={active ? 'var(--olive-700)' : 'var(--text-3)'} stroke="none" />
-  </svg>
-)
-
-const IconHistory = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{opacity:0.45}}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 3" />
-  </svg>
-)
-
-const IconSettings = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{opacity:0.45}}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
-  </svg>
-)
+const NavIcon = ({ type, active }) => {
+  const c = active ? 'var(--olive)' : 'var(--text-3)'
+  const icons = {
+    home: <><rect x="3" y="11" width="18" height="10" rx="1.5"/><path d="M1 11L15 2l14 9"/><rect x="10" y="16" width="5" height="5"/></>,
+    chart: <><rect x="3" y="13" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="13" rx="1"/><rect x="17" y="4" width="4" height="17" rx="1"/></>,
+    clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></>,
+    settings: <><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></>,
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      {icons[type]}
+    </svg>
+  )
+}
 
 export default function Sidebar({ active, onNav }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setTimeout(() => setMounted(true), 50) }, [])
+  const [vis, setVis] = useState(false)
+  useEffect(() => { setTimeout(() => setVis(true), 40) }, [])
 
-  const navItem = (id, label, icon, disabled = false) => {
+  const item = (id, label, icon, disabled) => {
     const isActive = active === id
     return (
-      <button
-        key={id}
-        onClick={() => !disabled && onNav(id)}
+      <button key={id} onClick={() => !disabled && onNav(id)}
         style={{
-          display: 'flex', alignItems: 'center', gap: '11px',
-          width: '100%', padding: '10px 14px',
-          background: isActive ? 'var(--olive-50)' : 'transparent',
-          border: 'none',
-          borderLeft: `3px solid ${isActive ? 'var(--olive-700)' : 'transparent'}`,
-          borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
+          display: 'flex', alignItems: 'center', gap: '10px',
+          width: '100%', padding: '9px 12px',
+          background: isActive ? 'var(--olive-faint)' : 'transparent',
+          border: 'none', borderRadius: 'var(--r-sm)',
           cursor: disabled ? 'default' : 'pointer',
-          color: isActive ? 'var(--olive-800)' : disabled ? 'var(--text-3)' : 'var(--text-2)',
-          fontSize: '13.5px',
-          fontWeight: isActive ? '500' : '400',
+          color: isActive ? 'var(--olive)' : disabled ? 'var(--text-4)' : 'var(--text-3)',
+          fontSize: '13px', fontWeight: isActive ? '500' : '400',
+          fontFamily: 'var(--font)',
           letterSpacing: '-0.01em',
-          transition: 'all var(--transition)',
-          opacity: mounted ? 1 : 0,
-          transform: mounted ? 'none' : 'translateX(-8px)',
-          transitionDelay: `${150 + ['dashboard','wb','history','settings'].indexOf(id) * 60}ms`,
+          transition: 'all var(--t)',
+          opacity: vis ? 1 : 0,
+          transform: vis ? 'none' : 'translateX(-10px)',
+          transitionDelay: `${100 + ['dashboard','wb','history','settings'].indexOf(id)*50}ms`,
         }}
-        onMouseEnter={e => { if (!isActive && !disabled) { e.currentTarget.style.background = 'var(--olive-50)'; e.currentTarget.style.color = 'var(--text)' }}}
-        onMouseLeave={e => { if (!isActive && !disabled) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = disabled ? 'var(--text-3)' : 'var(--text-2)' }}}
+        onMouseEnter={e => { if (!isActive && !disabled) e.currentTarget.style.background = 'var(--bg-2)' }}
+        onMouseLeave={e => { if (!isActive && !disabled) e.currentTarget.style.background = 'transparent' }}
       >
-        {icon}
-        <span>{label}</span>
-        {disabled && (
-          <span style={{marginLeft:'auto',fontSize:'10px',color:'var(--text-3)',background:'var(--bg)',padding:'2px 7px',borderRadius:'20px',fontWeight:'500',letterSpacing:'0.02em'}}>
-            Скоро
-          </span>
-        )}
+        <NavIcon type={icon} active={isActive} />
+        <span style={{ flex: 1 }}>{label}</span>
+        {disabled && <span style={{ fontSize: '10px', background: 'var(--bg-2)', color: 'var(--text-4)', padding: '2px 7px', borderRadius: '20px', letterSpacing: '0.02em' }}>Скоро</span>}
+        {isActive && <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--olive)', flexShrink: 0 }} />}
       </button>
     )
   }
 
   return (
     <aside style={{
-      width: 'var(--sidebar-w)',
-      minWidth: 'var(--sidebar-w)',
-      height: '100vh',
-      background: 'var(--white)',
-      borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
-      boxShadow: 'var(--shadow-sm)',
-      zIndex: 10,
-      opacity: mounted ? 1 : 0,
-      transform: mounted ? 'none' : 'translateX(-16px)',
-      transition: 'opacity 0.4s ease, transform 0.4s ease',
+      width: 'var(--sidebar-w)', minWidth: 'var(--sidebar-w)',
+      height: '100vh', background: 'var(--white)',
+      borderRight: '1px solid var(--border-light)',
+      display: 'flex', flexDirection: 'column',
+      boxShadow: 'var(--shadow-xs)',
+      opacity: vis ? 1 : 0,
+      transition: 'opacity 0.4s ease',
     }}>
-      {/* Logo */}
-      <div style={{
-        padding: '28px 20px 24px',
-        borderBottom: '1px solid var(--border-light)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
+      <div style={{ padding: '24px 16px 20px', borderBottom: '1px solid var(--border-light)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <Logo />
           <div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, letterSpacing: '-0.02em' }}>AISeller</div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-3)', marginTop: '2px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Аналитика</div>
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.03em' }}>AISeller</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-4)', letterSpacing: '0.05em', textTransform: 'uppercase', marginTop: '1px' }}>Аналитика</div>
           </div>
         </div>
       </div>
 
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: '16px 6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-        <div style={{ fontSize: '10px', color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '4px 17px 8px', fontWeight: 500 }}>
-          Главная
-        </div>
-        {navItem('dashboard', 'Дашборд', <IconHome active={active==='dashboard'} />)}
-
-        <div style={{ fontSize: '10px', color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '16px 17px 8px', fontWeight: 500 }}>
-          Анализ
-        </div>
-        {navItem('wb', 'Отчёт Wildberries', <IconChart active={active==='wb'} />)}
-        {navItem('history', 'История анализов', <IconHistory />, true)}
-
-        <div style={{ fontSize: '10px', color: 'var(--text-3)', letterSpacing: '0.1em', textTransform: 'uppercase', padding: '16px 17px 8px', fontWeight: 500 }}>
-          Система
-        </div>
-        {navItem('settings', 'Настройки', <IconSettings />, true)}
+      <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div style={{ fontSize: '10px', color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '6px 12px 6px', fontWeight: 500 }}>Обзор</div>
+        {item('dashboard', 'Дашборд', 'home')}
+        <div style={{ fontSize: '10px', color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '14px 12px 6px', fontWeight: 500 }}>Анализ</div>
+        {item('wb', 'Отчёт Wildberries', 'chart')}
+        {item('history', 'История анализов', 'clock', true)}
+        <div style={{ fontSize: '10px', color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '14px 12px 6px', fontWeight: 500 }}>Система</div>
+        {item('settings', 'Настройки', 'settings', true)}
       </nav>
 
-      {/* Footer */}
-      <div style={{
-        padding: '16px 20px',
-        borderTop: '1px solid var(--border-light)',
-        background: 'var(--bg)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'var(--olive-100)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '12px', fontWeight: 600, color: 'var(--olive-700)',
-          }}>ИА</div>
+      <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border-light)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--olive-faint)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600, color: 'var(--olive)' }}>ИА</div>
           <div>
-            <div style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text)' }}>ИП АКБАРИ</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Wildberries KZ</div>
+            <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text)', letterSpacing: '-0.01em' }}>ИП АКБАРИ</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-4)' }}>Wildberries KZ</div>
           </div>
         </div>
       </div>

@@ -1,204 +1,124 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
-import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Cell, PieChart, Pie
-} from 'recharts'
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line } from 'recharts'
 
-const fmt = n => new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0))
+const fmt = n => new Intl.NumberFormat('ru-RU').format(Math.round(Number(n)||0))
+const fmtK = n => { const v = Math.round(n); return v >= 1000 ? `${(v/1000).toFixed(0)}к` : String(v) }
 const fmtPct = n => `${Number(n).toFixed(1)}%`
+const PIE = ['var(--olive)', 'var(--olive-mid)', 'var(--olive-light)', '#C8D09A']
 
-const OLIVE_PALETTE = ['var(--olive-600)', 'var(--olive-400)', 'var(--olive-200)', 'var(--olive-100)']
+const Tip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 14px', boxShadow: 'var(--shadow)', fontSize: '12px' }}>
+      <div style={{ color: 'var(--text-3)', marginBottom: '6px', fontWeight: 500 }}>{label}</div>
+      {payload.map((p, i) => <div key={i} style={{ color: p.color, fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>{p.name}: {fmt(p.value)} ₸</div>)}
+    </div>
+  )
+}
+
+const IconFile = () => <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--olive)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9,15 12,12 15,15"/></svg>
+const IconReset = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
 
 function parseWBReport(data) {
   if (!data || data.length < 2) return null
-
   const headers = data[0]
-  const findCol = (...keys) => {
-    for (const key of keys) {
-      const i = headers.findIndex(h => h && String(h).toLowerCase().includes(key.toLowerCase()))
-      if (i >= 0) return i
-    }
-    return -1
-  }
-
+  const find = (...keys) => { for (const k of keys) { const i = headers.findIndex(h => h && String(h).includes(k)); if (i >= 0) return i } return -1 }
   const cols = {
-    id: findCol('№ отчета', 'отчет'),
-    entity: findCol('Юридическое лицо'),
-    dateStart: findCol('Дата начала'),
-    dateEnd: findCol('Дата конца'),
-    type: findCol('Тип отчета'),
-    sales: findCol('Продажа'),
-    transfer: findCol('К перечислению за товар'),
-    discount: findCol('Согласованная скидка'),
-    logistics: findCol('Стоимость логистики'),
-    storage: findCol('Стоимость хранения'),
-    ops: findCol('Стоимость операций'),
-    other: findCol('Прочие удержания'),
-    fines: findCol('Общая сумма штрафов'),
-    totalPay: findCol('Итого к оплате'),
-    currency: findCol('Валюта'),
+    type: find('Тип отчета'), sales: find('Продажа'),
+    transfer: find('К перечислению за товар'), logistics: find('Стоимость логистики'),
+    storage: find('Стоимость хранения'), ops: find('Стоимость операций'),
+    fines: find('Общая сумма штрафов'), other: find('Прочие удержания'),
+    totalPay: find('Итого к оплате'), start: find('Дата начала'),
+    end: find('Дата конца'), entity: find('Юридическое лицо'), currency: find('Валюта'),
   }
-
-  const rows = data.slice(1).filter(r => r && r[cols.type] === 'Основной')
-
-  const formatPeriod = (start, end) => {
-    if (!start) return '—'
-    const s = new Date(start)
-    const e = new Date(end)
-    const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
-    if (isNaN(s.getTime())) return String(start).slice(0, 10)
-    const sStr = `${s.getDate()} ${months[s.getMonth()]}`
-    const eStr = `${e.getDate()} ${months[e.getMonth()]}`
-    return `${sStr}–${eStr}`
-  }
-
-  const parsed = rows.map(r => ({
-    period: formatPeriod(r[cols.dateStart], r[cols.dateEnd]),
-    id: r[cols.id],
-    entity: r[cols.entity],
-    sales: Number(r[cols.sales]) || 0,
-    transfer: Number(r[cols.transfer]) || 0,
-    logistics: Number(r[cols.logistics]) || 0,
-    storage: Number(r[cols.storage]) || 0,
-    ops: Number(r[cols.ops]) || 0,
-    fines: Number(r[cols.fines]) || 0,
-    other: Number(r[cols.other]) || 0,
-    totalPay: Number(r[cols.totalPay]) || 0,
-    currency: r[cols.currency] || 'KZT',
+  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+  const fmtPer = (s, e) => { try { const sd = new Date(s), ed = new Date(e); return `${sd.getDate()} ${months[sd.getMonth()]}–${ed.getDate()} ${months[ed.getMonth()]}` } catch { return String(s||'').slice(0,10) } }
+  const rows = data.slice(1).filter(r => r && r[cols.type] === 'Основной').map(r => ({
+    period: fmtPer(r[cols.start], r[cols.end]),
+    sales: Number(r[cols.sales])||0, transfer: Number(r[cols.transfer])||0,
+    logistics: Number(r[cols.logistics])||0, storage: Number(r[cols.storage])||0,
+    ops: Number(r[cols.ops])||0, fines: Number(r[cols.fines])||0,
+    other: Number(r[cols.other])||0, totalPay: Number(r[cols.totalPay])||0,
+    currency: r[cols.currency]||'KZT',
   }))
-
-  const totals = {
-    sales: parsed.reduce((s, r) => s + r.sales, 0),
-    transfer: parsed.reduce((s, r) => s + r.transfer, 0),
-    logistics: parsed.reduce((s, r) => s + r.logistics, 0),
-    storage: parsed.reduce((s, r) => s + r.storage, 0),
-    ops: parsed.reduce((s, r) => s + r.ops, 0),
-    fines: parsed.reduce((s, r) => s + r.fines, 0),
-    totalPay: parsed.reduce((s, r) => s + r.totalPay, 0),
-    entity: rows[0]?.[cols.entity] || '',
-    currency: rows[0]?.[cols.currency] || 'KZT',
-    weeks: parsed.length,
+  if (!rows.length) return null
+  const sum = k => rows.reduce((s, r) => s + r[k], 0)
+  return {
+    rows, entity: data[1]?.[cols.entity] || '', currency: rows[0].currency,
+    totals: { sales: sum('sales'), transfer: sum('transfer'), logistics: sum('logistics'), storage: sum('storage'), ops: sum('ops'), fines: sum('fines'), totalPay: sum('totalPay') }
   }
-
-  return { rows: parsed, totals }
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null
+function MetricCard({ label, value, note, color = 'var(--olive)', delay = 0 }) {
+  const [vis, setVis] = useState(false)
+  useEffect(() => { setTimeout(() => setVis(true), delay) }, [delay])
   return (
-    <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 16px', boxShadow: 'var(--shadow)' }}>
-      <div style={{ fontSize: '11px', color: 'var(--text-3)', marginBottom: '8px', fontWeight: 500 }}>{label}</div>
-      {payload.map((p, i) => (
-        <div key={i} style={{ fontSize: '13px', color: p.color, fontWeight: 500 }}>
-          {p.name}: {fmt(p.value)} ₸
-        </div>
-      ))}
+    <div style={{
+      background: 'var(--white)', borderRadius: 'var(--r)', padding: '18px 20px',
+      boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)',
+      borderTop: `2px solid ${color}`,
+      opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(10px)',
+      transition: `opacity 0.45s ease ${delay}ms, transform 0.45s ease ${delay}ms`,
+    }}>
+      <div style={{ fontSize: '10.5px', color: 'var(--text-4)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 500, marginBottom: '10px' }}>{label}</div>
+      <div className="num" style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.04em', lineHeight: 1 }}>{value}</div>
+      {note && <div style={{ fontSize: '11px', color: 'var(--text-4)', marginTop: '5px' }}>{note}</div>}
     </div>
   )
 }
 
 function DropZone({ onFile }) {
   const [drag, setDrag] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const [vis, setVis] = useState(false)
   const inputRef = useRef()
-
-  useEffect(() => { setTimeout(() => setMounted(true), 80) }, [])
-
-  const handleDrop = useCallback(e => {
-    e.preventDefault()
-    setDrag(false)
-    const file = e.dataTransfer.files[0]
-    if (file) onFile(file)
-  }, [onFile])
-
-  const handleChange = e => {
-    if (e.target.files[0]) onFile(e.target.files[0])
-  }
+  useEffect(() => { setTimeout(() => setVis(true), 60) }, [])
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      minHeight: '100%', padding: '60px 40px',
-      opacity: mounted ? 1 : 0,
-      transform: mounted ? 'none' : 'translateY(24px)',
-      transition: 'all 0.5s ease',
-    }}>
-      <div style={{ marginBottom: '48px', textAlign: 'center' }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 500 }}>
-          Финансовый анализ
-        </div>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '48px', fontWeight: 700, color: 'var(--text)', lineHeight: 1.05, letterSpacing: '-0.03em', marginBottom: '16px' }}>
-          Анализ отчёта<br />Wildberries
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100%', padding: '48px 40px', opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(20px)', transition: 'all 0.5s ease' }}>
+      <div style={{ marginBottom: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '10.5px', color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px', fontWeight: 500 }}>Анализ отчётов</div>
+        <h1 style={{ fontSize: '40px', fontWeight: 700, color: 'var(--text)', lineHeight: 1.05, letterSpacing: '-0.04em', marginBottom: '14px' }}>
+          Финансовый анализ<br />Wildberries
         </h1>
-        <p style={{ fontSize: '15px', color: 'var(--text-3)', maxWidth: '460px', lineHeight: 1.6 }}>
-          Загрузите еженедельный финансовый отчёт Wildberries в формате <strong>.xlsx</strong> для мгновенного анализа ключевых показателей
+        <p style={{ fontSize: '14px', color: 'var(--text-3)', maxWidth: '420px', lineHeight: 1.65 }}>
+          Загрузите еженедельный финансовый отчёт в формате <strong>.xlsx</strong> — получите полный разбор: продажи, выплаты, комиссии, маржинальность
         </p>
       </div>
 
       <div
         onDragOver={e => { e.preventDefault(); setDrag(true) }}
         onDragLeave={() => setDrag(false)}
-        onDrop={handleDrop}
+        onDrop={e => { e.preventDefault(); setDrag(false); onFile(e.dataTransfer.files[0]) }}
         onClick={() => inputRef.current.click()}
         style={{
-          width: '100%', maxWidth: '540px',
-          border: `2px dashed ${drag ? 'var(--olive-600)' : 'var(--olive-200)'}`,
-          borderRadius: 'var(--radius-lg)',
-          padding: '56px 40px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: drag ? 'var(--olive-50)' : 'var(--white)',
-          transition: 'all var(--transition)',
+          width: '100%', maxWidth: '500px',
+          border: `1.5px dashed ${drag ? 'var(--olive)' : 'var(--border)'}`,
+          borderRadius: 'var(--r-lg)', padding: '48px 36px',
+          textAlign: 'center', cursor: 'pointer',
+          background: drag ? 'var(--olive-ghost)' : 'var(--white)',
+          transition: 'all var(--t)',
           boxShadow: drag ? 'var(--shadow-lg)' : 'var(--shadow-sm)',
         }}
       >
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleChange} />
-
-        <div style={{
-          width: 72, height: 72,
-          background: drag ? 'var(--olive-100)' : 'var(--olive-50)',
-          borderRadius: 'var(--radius)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 24px',
-          transition: 'all var(--transition)',
-        }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--olive-600)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14,2 14,8 20,8" />
-            <line x1="12" y1="18" x2="12" y2="12" />
-            <polyline points="9,15 12,12 15,15" />
-          </svg>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => onFile(e.target.files[0])} />
+        <div style={{ width: 60, height: 60, background: 'var(--olive-ghost)', borderRadius: 'var(--r)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', transition: 'background var(--t)', ...(drag && { background: 'var(--olive-faint)' }) }}>
+          <IconFile />
         </div>
-
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '22px', fontWeight: 600, color: 'var(--text)', marginBottom: '8px', letterSpacing: '-0.01em' }}>
-          {drag ? 'Отпустите файл' : 'Перетащите файл сюда'}
+        <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text)', marginBottom: '6px', letterSpacing: '-0.02em' }}>
+          {drag ? 'Отпустите файл' : 'Перетащите .xlsx файл'}
         </div>
-        <div style={{ fontSize: '13.5px', color: 'var(--text-3)', marginBottom: '24px' }}>
-          или нажмите для выбора
-        </div>
-
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '8px',
-          background: 'var(--olive-700)', color: 'var(--white)',
-          borderRadius: 'var(--radius-sm)', padding: '11px 28px',
-          fontSize: '13.5px', fontWeight: 500, letterSpacing: '-0.01em',
-          pointerEvents: 'none',
-        }}>
-          Выбрать файл .xlsx
+        <div style={{ fontSize: '13px', color: 'var(--text-4)', marginBottom: '22px' }}>или нажмите для выбора</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'var(--olive)', color: 'white', borderRadius: 'var(--r-sm)', padding: '10px 24px', fontSize: '13px', fontWeight: 500, pointerEvents: 'none' }}>
+          Выбрать файл
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '32px', marginTop: '36px' }}>
-        {[
-          { icon: '📊', text: 'Анализ продаж' },
-          { icon: '🚚', text: 'Стоимость логистики' },
-          { icon: '📈', text: 'Еженедельная динамика' },
-          { icon: '💳', text: 'Расчёт выплат' },
-        ].map((f, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-3)' }}>
-            <span style={{ fontSize: '16px' }}>{f.icon}</span>
-            {f.text}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', maxWidth: '500px', width: '100%', marginTop: '28px' }}>
+        {[['Продажи', 'По неделям'], ['Комиссия WB', 'Точный расчёт'], ['Маржа', 'Чистая прибыль'], ['Динамика', 'Тренды роста']].map(([t, s], i) => (
+          <div key={i} style={{ background: 'var(--white)', borderRadius: 'var(--r-sm)', padding: '12px', border: '1px solid var(--border-light)', textAlign: 'center' }}>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-2)', letterSpacing: '-0.01em' }}>{t}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-4)', marginTop: '2px' }}>{s}</div>
           </div>
         ))}
       </div>
@@ -207,12 +127,20 @@ function DropZone({ onFile }) {
 }
 
 function Results({ result, onReset }) {
-  const { rows, totals } = result
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setTimeout(() => setMounted(true), 80) }, [])
+  const { rows, totals, entity, currency } = result
+  const [vis, setVis] = useState(false)
+  useEffect(() => { setTimeout(() => setVis(true), 60) }, [])
 
-  const commissionPct = totals.transfer > 0 ? ((totals.logistics + totals.storage + totals.ops) / totals.transfer * 100) : 0
-  const netMargin = totals.transfer > 0 ? (totals.totalPay / totals.transfer * 100) : 0
+  const commPct = totals.transfer > 0 ? (totals.logistics + totals.storage + totals.ops) / totals.transfer * 100 : 0
+  const margin = totals.transfer > 0 ? totals.totalPay / totals.transfer * 100 : 0
+  const avgWeeklySales = totals.sales / rows.length
+  const bestWeek = rows.reduce((b, r) => r.sales > (b?.sales || 0) ? r : b, null)
+  const worstWeek = rows.reduce((w, r) => r.sales < (w?.sales ?? Infinity) ? r : w, null)
+
+  const forecast = rows.length >= 3 ? (() => {
+    const last3 = rows.slice(-3).map(r => r.sales)
+    return Math.max(0, Math.round((last3[1] - last3[0] + last3[2] - last3[1]) / 2 + last3[2]))
+  })() : null
 
   const pieData = [
     { name: 'К выплате', value: Math.max(0, Math.round(totals.totalPay)) },
@@ -221,224 +149,191 @@ function Results({ result, onReset }) {
     { name: 'Операции', value: Math.round(totals.ops) },
   ].filter(d => d.value > 0)
 
-  const card = (label, value, unit, color, delay, note) => (
-    <div style={{
-      background: 'var(--white)',
-      borderRadius: 'var(--radius)',
-      padding: '22px',
-      boxShadow: 'var(--shadow)',
-      border: '1px solid var(--border-light)',
-      borderTop: `3px solid ${color}`,
-      opacity: mounted ? 1 : 0,
-      transform: mounted ? 'none' : 'translateY(16px)',
-      transition: `opacity 0.5s ease ${delay}ms, transform 0.5s ease ${delay}ms`,
-    }}>
-      <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 500, marginBottom: '12px' }}>{label}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em', lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
-        <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{unit}</span>
-        {note && <span style={{ fontSize: '11px', color, background: `${color}18`, padding: '2px 8px', borderRadius: '20px', fontWeight: 500 }}>{note}</span>}
-      </div>
-    </div>
-  )
+  const healthScore = Math.min(100, Math.max(0, Math.round(margin * 0.6 + (commPct < 20 ? 30 : commPct < 30 ? 15 : 0) + (rows.length >= 8 ? 10 : 5))))
 
   return (
-    <div style={{ padding: '36px 40px' }}>
+    <div style={{ padding: '32px 36px' }}>
       {/* Header */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-        marginBottom: '36px',
-        opacity: mounted ? 1 : 0, transition: 'opacity 0.4s ease',
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '28px', opacity: vis ? 1 : 0, transition: 'opacity 0.4s ease' }}>
         <div>
-          <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px', fontWeight: 500 }}>
-            Wildberries · {totals.entity}
-          </div>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '40px', fontWeight: 700, color: 'var(--text)', lineHeight: 1, letterSpacing: '-0.03em' }}>
-            Результаты анализа
-          </h1>
-          <div style={{ fontSize: '13px', color: 'var(--text-3)', marginTop: '6px' }}>
-            {totals.weeks} недельных отчётов · {totals.currency}
-          </div>
+          <div style={{ fontSize: '10.5px', color: 'var(--text-4)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', fontWeight: 500 }}>Wildberries · {entity}</div>
+          <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.04em', lineHeight: 1 }}>Результаты анализа</h1>
+          <div style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '5px' }}>{rows.length} недель · {currency}</div>
         </div>
-        <button
-          onClick={onReset}
-          style={{
-            background: 'transparent', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-sm)', padding: '9px 18px',
-            fontSize: '13px', color: 'var(--text-2)', cursor: 'pointer',
-            fontFamily: 'var(--font-body)',
-            transition: 'all var(--transition)',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'var(--olive-50)'; e.currentTarget.style.borderColor = 'var(--olive-300)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--border)' }}
-        >
-          ← Загрузить другой файл
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {/* Health Score */}
+          <div style={{ background: 'var(--white)', border: '1px solid var(--border-light)', borderRadius: 'var(--r-sm)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div>
+              <div style={{ fontSize: '10px', color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>Здоровье бизнеса</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
+                <div className="num" style={{ fontSize: '20px', fontWeight: 700, color: healthScore >= 60 ? 'var(--olive)' : '#B45309', letterSpacing: '-0.03em' }}>{healthScore}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-4)' }}>/100</div>
+              </div>
+            </div>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${healthScore >= 60 ? 'var(--olive)' : '#D97706'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', color: healthScore >= 60 ? 'var(--olive)' : '#D97706', fontWeight: 700 }}>
+              {healthScore >= 70 ? '↑' : healthScore >= 50 ? '→' : '↓'}
+            </div>
+          </div>
+          <button onClick={onReset}
+            style={{ display: 'flex', alignItems: 'center', gap: '7px', background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '9px 16px', fontSize: '13px', color: 'var(--text-3)', cursor: 'pointer', fontFamily: 'var(--font)', transition: 'all var(--t)' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--olive)'; e.currentTarget.style.borderColor = 'var(--olive)' }}
+            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-3)'; e.currentTarget.style.borderColor = 'var(--border)' }}
+          >
+            <IconReset /> Новый файл
+          </button>
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '28px' }}>
-        {card('Продажи (Sellers price)', `${fmt(totals.sales)} ₸`, totals.currency, 'var(--olive-600)', 100)}
-        {card('К перечислению', `${fmt(totals.transfer)} ₸`, totals.currency, 'var(--olive-500)', 180)}
-        {card('Итого к выплате', `${fmt(totals.totalPay)} ₸`, totals.currency, 'var(--olive-400)', 260)}
-        {card('Комиссия WB', fmtPct(commissionPct), 'от суммы перечисления', 'var(--olive-300)', 340)}
-        {card('Чистая маржа', fmtPct(netMargin), 'выплата/перечисление', 'var(--olive-200)', 420)}
+      {/* Main KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '16px' }}>
+        <MetricCard label="Продажи" value={`${fmt(totals.sales)} ₸`} note={currency} color="var(--olive)" delay={60} />
+        <MetricCard label="К перечислению" value={`${fmt(totals.transfer)} ₸`} note="WB → Поставщик" color="var(--olive-mid)" delay={120} />
+        <MetricCard label="Итого выплата" value={`${fmt(totals.totalPay)} ₸`} note="На счёт" color="var(--olive)" delay={180} />
+        <MetricCard label="Комиссия WB" value={fmtPct(commPct)} note="от перечисления" color={commPct > 25 ? '#D97706' : 'var(--olive-mid)'} delay={240} />
+        <MetricCard label="Чистая маржа" value={fmtPct(margin)} note="выплата/оборот" color="var(--olive-light)" delay={300} />
+      </div>
+
+      {/* Insights row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px', opacity: vis ? 1 : 0, transition: 'opacity 0.5s ease 0.2s' }}>
+        {[
+          { label: 'Лучшая неделя', value: bestWeek?.period, sub: `${fmt(bestWeek?.sales||0)} ₸`, type: 'positive' },
+          { label: 'Худшая неделя', value: worstWeek?.period, sub: `${fmt(worstWeek?.sales||0)} ₸`, type: 'neutral' },
+          { label: 'Ср. продажи / нед.', value: `${fmt(avgWeeklySales)} ₸`, sub: `за ${rows.length} нед.`, type: 'neutral' },
+          { label: 'Прогноз след. нед.', value: forecast ? `${fmt(forecast)} ₸` : '—', sub: 'линейный тренд', type: forecast && forecast > avgWeeklySales ? 'positive' : 'neutral' },
+        ].map((ins, i) => (
+          <div key={i} style={{ background: ins.type === 'positive' ? 'var(--olive-ghost)' : 'var(--white)', border: `1px solid ${ins.type === 'positive' ? 'var(--border)' : 'var(--border-light)'}`, borderRadius: 'var(--r-sm)', padding: '14px 16px' }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-4)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>{ins.label}</div>
+            <div className="num" style={{ fontSize: '14px', fontWeight: 600, color: ins.type === 'positive' ? 'var(--olive)' : 'var(--text)', letterSpacing: '-0.02em' }}>{ins.value}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-4)', marginTop: '3px' }}>{ins.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Charts */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '24px' }}>
-        <div style={{
-          background: 'var(--white)', borderRadius: 'var(--radius)',
-          padding: '28px 28px 20px', boxShadow: 'var(--shadow)', border: '1px solid var(--border-light)',
-          opacity: mounted ? 1 : 0, transform: mounted ? 'none' : 'translateY(20px)',
-          transition: 'all 0.6s ease 0.3s',
-        }}>
-          <div style={{ marginBottom: '24px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 500 }}>Динамика</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '21px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Продажи и выплаты по неделям</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: '14px', marginBottom: '14px', opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(14px)', transition: 'all 0.5s ease 0.25s' }}>
+        <div style={{ background: 'var(--white)', borderRadius: 'var(--r)', padding: '22px 22px 14px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+          <div style={{ marginBottom: '18px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <div>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500, marginBottom: '3px' }}>Динамика</div>
+              <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Продажи и выплаты по неделям</div>
+            </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer width="100%" height={190}>
             <AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
               <defs>
-                <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--olive-500)" stopOpacity={0.2} />
-                  <stop offset="95%" stopColor="var(--olive-500)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--olive-300)" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="var(--olive-300)" stopOpacity={0} />
-                </linearGradient>
+                <linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--olive)" stopOpacity={0.15}/><stop offset="95%" stopColor="var(--olive)" stopOpacity={0}/></linearGradient>
+                <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="var(--olive-light)" stopOpacity={0.2}/><stop offset="95%" stopColor="var(--olive-light)" stopOpacity={0}/></linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light)" vertical={false} />
-              <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}к`} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="sales" name="Продажи" stroke="var(--olive-600)" strokeWidth={2} fill="url(#g1)" dot={false} activeDot={{ r: 4 }} />
-              <Area type="monotone" dataKey="totalPay" name="К выплате" stroke="var(--olive-300)" strokeWidth={2} fill="url(#g2)" dot={false} activeDot={{ r: 4 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light)" vertical={false}/>
+              <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'var(--text-4)' }} axisLine={false} tickLine={false}/>
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text-4)' }} axisLine={false} tickLine={false} tickFormatter={fmtK}/>
+              <Tooltip content={<Tip />}/>
+              <Area type="monotone" dataKey="sales" name="Продажи" stroke="var(--olive)" strokeWidth={2} fill="url(#ga)" dot={false} activeDot={{ r: 3 }}/>
+              <Area type="monotone" dataKey="totalPay" name="К выплате" stroke="var(--olive-light)" strokeWidth={2} fill="url(#gb)" dot={false} activeDot={{ r: 3 }}/>
             </AreaChart>
           </ResponsiveContainer>
         </div>
-
-        <div style={{
-          background: 'var(--white)', borderRadius: 'var(--radius)',
-          padding: '28px', boxShadow: 'var(--shadow)', border: '1px solid var(--border-light)',
-          opacity: mounted ? 1 : 0, transform: mounted ? 'none' : 'translateY(20px)',
-          transition: 'all 0.6s ease 0.4s',
-        }}>
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 500 }}>Структура</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Распределение средств</div>
+        <div style={{ background: 'var(--white)', borderRadius: 'var(--r)', padding: '22px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)' }}>
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500, marginBottom: '3px' }}>Структура</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Распределение средств</div>
           </div>
-          <ResponsiveContainer width="100%" height={150}>
+          <ResponsiveContainer width="100%" height={140}>
             <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" innerRadius={38} outerRadius={62} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
-                {pieData.map((_, i) => <Cell key={i} fill={OLIVE_PALETTE[i % OLIVE_PALETTE.length]} stroke="none" />)}
+              <Pie data={pieData} cx="50%" cy="50%" innerRadius={36} outerRadius={60} paddingAngle={3} dataKey="value" startAngle={90} endAngle={-270}>
+                {pieData.map((_, i) => <Cell key={i} fill={PIE[i % PIE.length]} stroke="none"/>)}
               </Pie>
-              <Tooltip formatter={(v) => [`${fmt(v)} ₸`, '']} />
+              <Tooltip formatter={v => [`${fmt(v)} ₸`, '']}/>
             </PieChart>
           </ResponsiveContainer>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
             {pieData.map((d, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: OLIVE_PALETTE[i % OLIVE_PALETTE.length], flexShrink: 0 }} />
-                  <span style={{ fontSize: '12px', color: 'var(--text-2)' }}>{d.name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <div style={{ width: 7, height: 7, borderRadius: '50%', background: PIE[i % PIE.length] }}/>
+                  <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>{d.name}</span>
                 </div>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)', fontFamily: 'var(--font-display)' }}>{fmt(d.value)} ₸</span>
+                <span className="num" style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.03em' }}>{fmt(d.value)} ₸</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Bar chart logistics */}
-      <div style={{
-        background: 'var(--white)', borderRadius: 'var(--radius)',
-        padding: '28px 28px 20px', boxShadow: 'var(--shadow)', border: '1px solid var(--border-light)',
-        marginBottom: '24px',
-        opacity: mounted ? 1 : 0, transform: mounted ? 'none' : 'translateY(20px)',
-        transition: 'all 0.6s ease 0.5s',
-      }}>
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 500 }}>Детализация</div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '21px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Логистика и Хранение</div>
+      {/* Bar chart */}
+      <div style={{ background: 'var(--white)', borderRadius: 'var(--r)', padding: '22px 22px 14px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)', marginBottom: '14px', opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(14px)', transition: 'all 0.5s ease 0.35s' }}>
+        <div style={{ marginBottom: '18px' }}>
+          <div style={{ fontSize: '10.5px', color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500, marginBottom: '3px' }}>Затраты</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Логистика и Хранение по неделям</div>
         </div>
-        <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -20 }} barSize={22} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light)" vertical={false} />
-            <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}к`} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="logistics" name="Логистика" fill="var(--olive-500)" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="storage" name="Хранение" fill="var(--olive-200)" radius={[4, 4, 0, 0]} />
+        <ResponsiveContainer width="100%" height={160}>
+          <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: -20 }} barSize={18} barGap={3}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-light)" vertical={false}/>
+            <XAxis dataKey="period" tick={{ fontSize: 10, fill: 'var(--text-4)' }} axisLine={false} tickLine={false}/>
+            <YAxis tick={{ fontSize: 10, fill: 'var(--text-4)' }} axisLine={false} tickLine={false} tickFormatter={fmtK}/>
+            <Tooltip content={<Tip />}/>
+            <Bar dataKey="logistics" name="Логистика" fill="var(--olive)" radius={[3, 3, 0, 0]}/>
+            <Bar dataKey="storage" name="Хранение" fill="var(--olive-light)" radius={[3, 3, 0, 0]}/>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Table */}
-      <div style={{
-        background: 'var(--white)', borderRadius: 'var(--radius)',
-        boxShadow: 'var(--shadow)', border: '1px solid var(--border-light)',
-        overflow: 'hidden',
-        opacity: mounted ? 1 : 0, transform: mounted ? 'none' : 'translateY(20px)',
-        transition: 'all 0.6s ease 0.6s',
-      }}>
-        <div style={{ padding: '24px 28px 20px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: 'var(--white)', borderRadius: 'var(--r)', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border-light)', overflow: 'hidden', opacity: vis ? 1 : 0, transform: vis ? 'none' : 'translateY(14px)', transition: 'all 0.5s ease 0.45s' }}>
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: '11px', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '4px', fontWeight: 500 }}>Таблица</div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: '21px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Детальные данные по неделям</div>
+            <div style={{ fontSize: '10.5px', color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500, marginBottom: '3px' }}>Детализация</div>
+            <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em' }}>Данные по неделям</div>
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--text-3)', background: 'var(--olive-50)', padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--border)' }}>
-            {rows.length} отчётов
-          </div>
+          <span style={{ fontSize: '11px', background: 'var(--olive-ghost)', color: 'var(--olive)', padding: '4px 12px', borderRadius: '20px', fontWeight: 500 }}>{rows.length} отчётов</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
             <thead>
               <tr style={{ background: 'var(--bg)' }}>
                 {['Период', 'Продажи', 'К перечислению', 'К выплате', 'Логистика', 'Хранение', 'Маржа'].map(h => (
-                  <th key={h} style={{ padding: '11px 18px', textAlign: h === 'Период' ? 'left' : 'right', fontSize: '10.5px', color: 'var(--text-3)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 500, borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Период' ? 'left' : 'right', fontSize: '10.5px', color: 'var(--text-4)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 500, borderBottom: '1px solid var(--border-light)', whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.map((row, i) => {
-                const margin = row.transfer > 0 ? (row.totalPay / row.transfer * 100).toFixed(1) : '—'
-                const isPositive = row.totalPay >= 0
+                const mar = row.transfer > 0 ? (row.totalPay / row.transfer * 100).toFixed(1) : '—'
+                const isBest = row.period === bestWeek?.period
                 return (
-                  <tr key={i} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--border-light)' : 'none', cursor: 'default' }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--olive-50)'}
-                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  <tr key={i} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--border-light)' : 'none', background: isBest ? 'var(--olive-ghost)' : 'transparent', transition: 'background var(--t)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                    onMouseLeave={e => e.currentTarget.style.background = isBest ? 'var(--olive-ghost)' : 'transparent'}
                   >
-                    <td style={{ padding: '12px 18px', fontSize: '13px', color: 'var(--text)', fontWeight: 500, whiteSpace: 'nowrap' }}>{row.period}</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13.5px', color: 'var(--olive-700)', fontWeight: 600, fontFamily: 'var(--font-display)', whiteSpace: 'nowrap' }}>{fmt(row.sales)} ₸</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px', color: 'var(--text)', whiteSpace: 'nowrap' }}>{fmt(row.transfer)} ₸</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px', color: isPositive ? 'var(--olive-700)' : '#c0392b', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmt(row.totalPay)} ₸</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmt(row.logistics)} ₸</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', fontSize: '13px', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmt(row.storage)} ₸</td>
-                    <td style={{ padding: '12px 18px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--olive-700)', background: 'var(--olive-50)', padding: '3px 10px', borderRadius: '20px' }}>
-                        {margin}%
-                      </span>
+                    <td style={{ padding: '11px 16px', fontSize: '12.5px', color: 'var(--text)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {isBest && <span style={{ fontSize: '9px', background: 'var(--olive)', color: 'white', padding: '1px 6px', borderRadius: '10px', fontWeight: 500 }}>ЛУЧ</span>}
+                        {row.period}
+                      </div>
+                    </td>
+                    <td className="num" style={{ padding: '11px 16px', textAlign: 'right', fontSize: '13px', color: 'var(--olive)', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmt(row.sales)} ₸</td>
+                    <td className="num" style={{ padding: '11px 16px', textAlign: 'right', fontSize: '12.5px', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{fmt(row.transfer)} ₸</td>
+                    <td className="num" style={{ padding: '11px 16px', textAlign: 'right', fontSize: '12.5px', color: row.totalPay >= 0 ? 'var(--text)' : '#B91C1C', fontWeight: 500, whiteSpace: 'nowrap' }}>{fmt(row.totalPay)} ₸</td>
+                    <td className="num" style={{ padding: '11px 16px', textAlign: 'right', fontSize: '12.5px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(row.logistics)} ₸</td>
+                    <td className="num" style={{ padding: '11px 16px', textAlign: 'right', fontSize: '12.5px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{fmt(row.storage)} ₸</td>
+                    <td style={{ padding: '11px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <span style={{ fontSize: '11.5px', fontWeight: 600, color: 'var(--olive)', background: 'var(--olive-ghost)', padding: '2px 9px', borderRadius: '20px' }}>{mar}%</span>
                     </td>
                   </tr>
                 )
               })}
             </tbody>
             <tfoot>
-              <tr style={{ background: 'var(--olive-50)', borderTop: '2px solid var(--border)' }}>
-                <td style={{ padding: '13px 18px', fontSize: '12px', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Итого</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right', fontSize: '14px', color: 'var(--olive-700)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fmt(totals.sales)} ₸</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right', fontSize: '14px', color: 'var(--text)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fmt(totals.transfer)} ₸</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right', fontSize: '14px', color: 'var(--olive-700)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fmt(totals.totalPay)} ₸</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right', fontSize: '14px', color: 'var(--text)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fmt(totals.logistics)} ₸</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right', fontSize: '14px', color: 'var(--text)', fontWeight: 700, fontFamily: 'var(--font-display)' }}>{fmt(totals.storage)} ₸</td>
-                <td style={{ padding: '13px 18px', textAlign: 'right' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--olive-700)', background: 'var(--olive-100)', padding: '4px 12px', borderRadius: '20px' }}>
-                    {fmtPct(netMargin)}
+              <tr style={{ background: 'var(--olive-ghost)', borderTop: '1.5px solid var(--border)' }}>
+                <td style={{ padding: '12px 16px', fontSize: '11px', color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Итого</td>
+                <td className="num" style={{ padding: '12px 16px', textAlign: 'right', fontSize: '14px', color: 'var(--olive)', fontWeight: 700 }}>{fmt(totals.sales)} ₸</td>
+                <td className="num" style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13.5px', color: 'var(--text)', fontWeight: 700 }}>{fmt(totals.transfer)} ₸</td>
+                <td className="num" style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13.5px', color: 'var(--olive)', fontWeight: 700 }}>{fmt(totals.totalPay)} ₸</td>
+                <td className="num" style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13.5px', color: 'var(--text)', fontWeight: 700 }}>{fmt(totals.logistics)} ₸</td>
+                <td className="num" style={{ padding: '12px 16px', textAlign: 'right', fontSize: '13.5px', color: 'var(--text)', fontWeight: 700 }}>{fmt(totals.storage)} ₸</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--olive)', background: 'var(--olive-faint)', padding: '3px 10px', borderRadius: '20px' }}>
+                    {totals.transfer > 0 ? fmtPct(totals.totalPay / totals.transfer * 100) : '—'}
                   </span>
                 </td>
               </tr>
@@ -456,43 +351,33 @@ export default function WBAnalyzer() {
   const [error, setError] = useState(null)
 
   const handleFile = useCallback(async (file) => {
-    setLoading(true)
-    setError(null)
+    if (!file) return
+    setLoading(true); setError(null)
     try {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array', cellDates: true })
       const sheet = wb.Sheets[wb.SheetNames[0]]
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '' })
       const parsed = parseWBReport(data)
-      if (!parsed || parsed.rows.length === 0) {
-        setError('Не удалось распознать формат файла. Убедитесь, что это еженедельный отчёт Wildberries.')
-      } else {
-        setResult(parsed)
-      }
-    } catch (e) {
-      setError('Ошибка при чтении файла: ' + e.message)
-    } finally {
-      setLoading(false)
-    }
+      if (!parsed) setError('Не удалось распознать формат. Убедитесь, что это еженедельный отчёт Wildberries.')
+      else setResult(parsed)
+    } catch (e) { setError('Ошибка чтения файла: ' + e.message) }
+    finally { setLoading(false) }
   }, [])
 
   if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '20px' }}>
-      <div style={{ width: 48, height: 48, border: '3px solid var(--olive-100)', borderTop: '3px solid var(--olive-600)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-      <div style={{ fontSize: '14px', color: 'var(--text-3)' }}>Анализируем отчёт...</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '14px' }}>
+      <div style={{ width: 36, height: 36, border: '2.5px solid var(--olive-faint)', borderTop: '2.5px solid var(--olive)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}/>
+      <div style={{ fontSize: '13px', color: 'var(--text-4)' }}>Анализируем отчёт...</div>
     </div>
   )
 
   if (error) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '20px', padding: '40px' }}>
-      <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius)', padding: '24px 32px', maxWidth: '500px', textAlign: 'center' }}>
-        <div style={{ fontSize: '28px', marginBottom: '12px' }}>⚠️</div>
-        <div style={{ fontSize: '14px', color: '#991b1b', lineHeight: 1.6 }}>{error}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px', padding: '40px' }}>
+      <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 'var(--r)', padding: '24px 32px', maxWidth: '480px', textAlign: 'center' }}>
+        <div style={{ fontSize: '13px', color: '#991B1B', lineHeight: 1.6 }}>{error}</div>
       </div>
-      <button onClick={() => setError(null)} style={{ background: 'var(--olive-700)', color: 'white', border: 'none', borderRadius: 'var(--radius-sm)', padding: '10px 24px', fontSize: '13.5px', cursor: 'pointer', fontFamily: 'var(--font-body)' }}>
-        Попробовать снова
-      </button>
+      <button onClick={() => setError(null)} style={{ background: 'var(--olive)', color: 'white', border: 'none', borderRadius: 'var(--r-sm)', padding: '10px 24px', fontSize: '13px', cursor: 'pointer', fontFamily: 'var(--font)' }}>Попробовать снова</button>
     </div>
   )
 
